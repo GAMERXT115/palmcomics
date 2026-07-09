@@ -1,6 +1,6 @@
 platform :ios, '13.0'
 
-load File.join(File.dirname(File.realpath(__FILE__)), 'Flutter', 'podhelper.rb')
+load File.join(File.dirname(__FILE__), 'Flutter', 'podhelper.rb')
 
 target 'Runner' do
   use_frameworks!
