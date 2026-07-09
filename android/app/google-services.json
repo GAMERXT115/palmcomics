@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "73084774791",
+    "project_id": "palmcomics-50edb",
+    "storage_bucket": "palmcomics-50edb.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:73084774791:android:5d85a0db4cc0a3a56dcb22",
+        "android_client_info": {
+          "package_name": "com.hamtech.palmcomics"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC2Pq4eOzAy1xCP2dZXfjHgc3qZA3N53jY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,14 +1,15 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:archive/archive.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:dio/dio.dart';
-import 'package:photo_view/photo_view.dart';
-import 'package:photo_view/photo_view_gallery.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:provider/provider.dart';
+import 'package:page_flip/page_flip.dart';
 import 'main.dart';
 
 class ComicReaderScreen extends StatefulWidget {
@@ -28,37 +29,84 @@ class _ComicReaderScreenState extends State<ComicReaderScreen> {
   bool _showContinuePrompt = false;
   bool _uiVisible = true;
   String _status = "Initializing...";
-  late PageController _pageController;
+  double _downloadProgress = 0;
+  Timer? _pageSyncTimer;
+  final GlobalKey<PageFlipWidgetState> _controller = GlobalKey<PageFlipWidgetState>();
 
   @override
   void initState() {
     super.initState();
-    _pageController = PageController();
     _loadComic();
+    _startPageSync();
   }
 
   @override
   void dispose() {
-    _pageController.dispose();
+    _pageSyncTimer?.cancel();
     super.dispose();
+  }
+
+  void _startPageSync() {
+    _pageSyncTimer = Timer.periodic(const Duration(milliseconds: 200), (timer) {
+      if (_controller.currentState != null) {
+        int index = _controller.currentState!.pageNumber;
+        if (index != _currentPage) {
+          setState(() {
+            _currentPage = index;
+          });
+          _saveCurrentPage(index);
+        }
+      }
+    });
   }
 
   Future<void> _loadComic() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       _savedPage = prefs.getInt('last_page_${widget.comic.id}') ?? 0;
+      _currentPage = _savedPage;
 
-      String filePath;
-      if (widget.comic.isDownloaded) {
+      String filePath = "";
+      final docDir = await getApplicationDocumentsDirectory();
+      final tempDir = await getTemporaryDirectory();
+      
+      final fileName = p.basename(Uri.parse(widget.comic.downloadUrl).path);
+      final permanentPath = p.join(docDir.path, fileName);
+      final tempPath = p.join(tempDir.path, "temp_${widget.comic.id}.cbz");
+
+      if (await File(permanentPath).exists()) {
         setState(() => _status = "Reading local file...");
-        final directory = await getApplicationDocumentsDirectory();
-        final fileName = p.basename(Uri.parse(widget.comic.downloadUrl).path);
-        filePath = p.join(directory.path, fileName);
+        filePath = permanentPath;
+      } else if (await File(tempPath).exists()) {
+        setState(() => _status = "Reading from cache...");
+        filePath = tempPath;
       } else {
         setState(() => _status = "Downloading...");
-        final directory = await getTemporaryDirectory();
-        filePath = p.join(directory.path, "temp_comic.cbz");
-        await Dio().download(widget.comic.downloadUrl, filePath);
+        final provider = Provider.of<ComicProvider>(context, listen: false);
+        
+        String downloadUrl = widget.comic.downloadUrl;
+        if (!downloadUrl.startsWith(provider.baseUrl) && provider.baseUrl.isNotEmpty) {
+          final uri = Uri.parse(downloadUrl);
+          downloadUrl = "${provider.baseUrl}${uri.path}";
+        }
+
+        final dio = Dio(BaseOptions(
+          connectTimeout: const Duration(seconds: 15),
+          receiveTimeout: const Duration(minutes: 5),
+        ));
+
+        await dio.download(
+          downloadUrl,
+          tempPath,
+          onReceiveProgress: (received, total) {
+            if (total != -1) {
+              setState(() {
+                _downloadProgress = received / total;
+              });
+            }
+          },
+        );
+        filePath = tempPath;
       }
 
       setState(() => _status = "Decoding pages...");
@@ -66,6 +114,8 @@ class _ComicReaderScreenState extends State<ComicReaderScreen> {
       final bytes = await file.readAsBytes();
       
       final images = await compute(_decodeArchive, bytes);
+
+      if (images.isEmpty) throw Exception("No images found in comic file");
 
       if (mounted) {
         setState(() {
@@ -80,7 +130,21 @@ class _ComicReaderScreenState extends State<ComicReaderScreen> {
       if (mounted) {
         setState(() => _loading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text("Error: ${e.toString()}"),
+            backgroundColor: Colors.red,
+            action: SnackBarAction(
+              label: "RETRY",
+              textColor: Colors.white,
+              onPressed: () {
+                setState(() {
+                  _loading = true;
+                  _downloadProgress = 0;
+                });
+                _loadComic();
+              },
+            ),
+          ),
         );
       }
     }
@@ -93,19 +157,20 @@ class _ComicReaderScreenState extends State<ComicReaderScreen> {
     final imageFiles = archive.files.where((f) {
       if (!f.isFile) return false;
       final name = f.name.toLowerCase();
-      return name.endsWith('.jpg') || name.endsWith('.jpeg') || name.endsWith('.png') || name.endsWith('.webp');
+      return name.endsWith('.jpg') || 
+             name.endsWith('.jpeg') || 
+             name.endsWith('.png') || 
+             name.endsWith('.webp');
     }).toList();
 
     imageFiles.sort((a, b) => a.name.compareTo(b.name));
 
     for (var file in imageFiles) {
-      final content = file.content;
-      if (content is Uint8List) {
-        pages.add(content);
-      } else {
-        pages.add(Uint8List.fromList(List<int>.from(content)));
-      }
+      final content = file.content as List<int>;
+      pages.add(Uint8List.fromList(content));
     }
+    
+    archive.clear();
     return pages;
   }
 
@@ -116,11 +181,12 @@ class _ComicReaderScreenState extends State<ComicReaderScreen> {
 
   void _jumpToPage(int index) {
     if (index >= 0 && index < _pages.length) {
-      _pageController.jumpToPage(index);
+      _controller.currentState?.goToPage(index);
       setState(() {
         _currentPage = index;
         _showContinuePrompt = false;
       });
+      _saveCurrentPage(index);
     }
   }
 
@@ -185,9 +251,30 @@ class _ComicReaderScreenState extends State<ComicReaderScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const CircularProgressIndicator(color: Color(0xFFFFEB3B)),
-                  const SizedBox(height: 20),
-                  Text(_status, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      SizedBox(
+                        width: 80,
+                        height: 80,
+                        child: CircularProgressIndicator(
+                          value: _downloadProgress > 0 ? _downloadProgress : null,
+                          color: const Color(0xFFFFEB3B),
+                          strokeWidth: 8,
+                        ),
+                      ),
+                      if (_downloadProgress > 0 && _downloadProgress < 1.0)
+                        Text(
+                          "${(_downloadProgress * 100).toInt()}%",
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    _status, 
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, letterSpacing: 1.2)
+                  ),
                 ],
               ),
             )
@@ -195,23 +282,30 @@ class _ComicReaderScreenState extends State<ComicReaderScreen> {
               children: [
                 GestureDetector(
                   onTap: () => setState(() => _uiVisible = !_uiVisible),
-                  child: PhotoViewGallery.builder(
-                    itemCount: _pages.length,
-                    pageController: _pageController,
-                    builder: (context, index) {
-                      return PhotoViewGalleryPageOptions(
-                        imageProvider: MemoryImage(_pages[index]),
-                        initialScale: PhotoViewComputedScale.contained,
-                        minScale: PhotoViewComputedScale.contained,
-                        maxScale: PhotoViewComputedScale.covered * 2,
+                  child: PageFlipWidget(
+                    key: _controller,
+                    backgroundColor: Colors.black,
+                    initialIndex: _savedPage,
+                    lastPage: Container(color: Colors.black),
+                    children: _pages.asMap().entries.map((entry) {
+                      return Container(
+                        key: ValueKey('page_${entry.key}'),
+                        color: Colors.black,
+                        child: InteractiveViewer(
+                          minScale: 1.0,
+                          maxScale: 4.0,
+                          child: Center(
+                            child: Image.memory(
+                              entry.value,
+                              fit: BoxFit.contain,
+                              gaplessPlayback: true,
+                              filterQuality: FilterQuality.low,
+                              isAntiAlias: true,
+                            ),
+                          ),
+                        ),
                       );
-                    },
-                    onPageChanged: (index) {
-                      setState(() => _currentPage = index);
-                      _saveCurrentPage(index);
-                    },
-                    scrollPhysics: const BouncingScrollPhysics(),
-                    backgroundDecoration: const BoxDecoration(color: Colors.black),
+                    }).toList(),
                   ),
                 ),
                 if (_uiVisible && _showContinuePrompt)
@@ -266,7 +360,7 @@ class _ComicReaderScreenState extends State<ComicReaderScreen> {
                           boxShadow: const [BoxShadow(color: Colors.black, offset: Offset(3, 3))],
                         ),
                         child: Text(
-                          "${_currentPage + 1} / ${_pages.length}",
+                          "PAGE ${_currentPage + 1} OF ${_pages.length}",
                           style: const TextStyle(fontWeight: FontWeight.w900),
                         ),
                       ),

@@ -169,7 +169,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                   border: Border.all(color: Colors.white, width: 2),
                 ),
                 child: const Text(
-                  "POW! LOADING...",
+                  "LOADING...",
                   style: TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w900,

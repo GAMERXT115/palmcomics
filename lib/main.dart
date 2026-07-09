@@ -5,11 +5,15 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'dart:io';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_database/firebase_database.dart';
 import 'splash_screen.dart';
 import 'login_screen.dart';
 import 'home.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
   runApp(
     MultiProvider(
       providers: [
@@ -56,13 +60,48 @@ class ComicProvider extends ChangeNotifier {
 
   List<Comic> get comics => _comics;
   bool get isLoading => _isLoading;
+  String get baseUrl => _baseUrl;
 
   void updateBaseUrl(String newUrl) {
     _baseUrl = newUrl;
     notifyListeners();
   }
 
+  Future<void> fetchServerIp() async {
+    try {
+      final database = FirebaseDatabase.instanceFor(
+        app: Firebase.app(),
+        databaseURL: 'https://palmcomics-50edb-default-rtdb.europe-west1.firebasedatabase.app',
+      );
+      final ref = database.ref('serverInfo');
+      final snapshot = await ref.get();
+      
+      if (snapshot.exists) {
+        final data = Map<String, dynamic>.from(snapshot.value as Map);
+        final publicIp = data['ip'];
+        final privateIp = data['privateIp'];
+        final port = data['port2'] ?? 9091;
+
+        try {
+          final testDio = Dio(BaseOptions(connectTimeout: const Duration(seconds: 3)));
+          await testDio.get("http://$privateIp:$port/comics");
+          _baseUrl = "http://$privateIp:$port";
+        } catch (e) {
+          _baseUrl = "http://$publicIp:$port";
+        }
+        
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint(e.toString());
+    }
+  }
+
   Future<void> fetchComics() async {
+    if (_baseUrl.isEmpty) {
+      await fetchServerIp();
+    }
+    
     if (_baseUrl.isEmpty) return;
     
     _isLoading = true;
@@ -76,7 +115,7 @@ class ComicProvider extends ChangeNotifier {
         await _checkDownloadedStatus();
       }
     } catch (e) {
-      debugPrint("Fetch Error: $e");
+      debugPrint(e.toString());
     }
 
     _isLoading = false;
@@ -106,17 +145,12 @@ class ComicProvider extends ChangeNotifier {
       await _dio.download(
         comic.downloadUrl,
         filePath,
-        onReceiveProgress: (received, total) {
-          if (total != -1) {
-            debugPrint("${(received / total * 100).toStringAsFixed(0)}%");
-          }
-        },
       );
 
       comic.isDownloaded = true;
       notifyListeners();
     } catch (e) {
-      debugPrint("Download Error: $e");
+      debugPrint(e.toString());
     }
   }
 }

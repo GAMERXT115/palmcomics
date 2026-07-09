@@ -18,7 +18,7 @@ class DownloadsScreen extends StatelessWidget {
         elevation: 0,
         centerTitle: true,
         title: const Text(
-          "OFFLINE COMICS",
+          "DOWNLOADED COMICS",
           style: TextStyle(
             fontWeight: FontWeight.w900,
             fontStyle: FontStyle.italic,
@@ -56,7 +56,7 @@ class DownloadsScreen extends StatelessWidget {
                       shape: const RoundedRectangleBorder(),
                     ),
                     onPressed: () => Navigator.of(context).pop(),
-                    child: const Text("GO TO STORE"),
+                    child: const Text("DOWNLOAD COMICS"),
                   ),
                 ],
               ),

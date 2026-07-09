@@ -3,6 +3,9 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  firebase_auth
+  firebase_core
+  local_auth_windows
   permission_handler_windows
   url_launcher_windows
 )

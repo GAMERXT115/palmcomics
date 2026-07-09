@@ -3,6 +3,20 @@ const fs = require('fs');
 const path = require('path');
 const cors = require('cors');
 const os = require('os');
+const axios = require('axios');
+const admin = require('firebase-admin');
+console.log(admin); // See what’s actually exported
+
+
+const serviceAccount = require('./firebase-credentials.json');
+
+admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+    databaseURL: "https://palmcomics-50edb-default-rtdb.europe-west1.firebasedatabase.app/"
+});
+
+const db = admin.database();
+const serverInfoRef = db.ref('serverInfo');
 
 const app = express();
 const port = 9091;
@@ -20,16 +34,46 @@ if (!fs.existsSync(comicsDir)) {
 
 app.use('/files', express.static(comicsDir));
 
-function getLocalIp() {
-    const interfaces = os.networkInterfaces();
-    for (const name of Object.keys(interfaces)) {
-        for (const iface of interfaces[name]) {
-            if (iface.family === 'IPv4' && !iface.internal) {
-                return iface.address;
-            }
-        }
+async function getPublicIpAddress() {
+    try {
+        const response = await axios.get('https://api.ipify.org');
+        return response.data;
+    } catch (error) {
+        return null;
     }
-    return '127.0.0.1';
+}
+
+function getLocalIpAddress() {
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const alias of interfaces[name]) {
+      if (alias.family === 'IPv4' && !alias.internal) {
+        if (alias.address.startsWith('172.20.')) {
+          return alias.address;
+        }
+      }
+    }
+  }
+  return '127.0.0.1';
+}
+
+
+async function updateServerIpInFirebase() {
+    try {
+        const publicIp = await getPublicIpAddress();
+        const privateIp = getLocalIpAddress();
+        
+        await serverInfoRef.update({
+            ip: publicIp || 'Unavailable',
+            privateIp: privateIp || 'Unavailable',
+            port2: port,
+            lastUpdated: admin.database.ServerValue.TIMESTAMP
+        });
+        
+        console.log(`IP Updated - Public: ${publicIp}, Private: ${privateIp}`);
+    } catch (error) {
+        console.error(error);
+    }
 }
 
 function findComicFile(dirPath) {
@@ -52,7 +96,7 @@ app.get('/comics', (req, res) => {
             return res.status(404).json({ error: 'Root directory not found' });
         }
 
-        const localIp = getLocalIp();
+        const localIp = getLocalIpAddress();
         const baseUrl = `http://${localIp}:${port}/files`;
         let comicList = [];
         let idCounter = 1;
@@ -103,12 +147,15 @@ app.get('/comics', (req, res) => {
     }
 });
 
-const server = app.listen(port, '0.0.0.0', (err) => {
+const server = app.listen(port, '0.0.0.0', async (err) => {
     if (err) {
         console.error(err);
         return;
     }
-    console.log(`Comic server running at http://${getLocalIp()}:${port}`);
+    console.log(`Comic server running at http://${getLocalIpAddress()}:${port}`);
+    
+    await updateServerIpInFirebase();
+    setInterval(updateServerIpInFirebase, 15 * 60 * 1000);
 });
 
 server.on('error', (err) => {
