@@ -249,8 +249,10 @@ class _ComicReaderScreenState extends State<ComicReaderScreen> {
         return Scaffold(
           backgroundColor: Colors.black,
           extendBodyBehindAppBar: true,
-          body: _loading
-              ? Center(
+          body: Stack(
+            children: [
+              if (_loading)
+                Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -281,141 +283,145 @@ class _ComicReaderScreenState extends State<ComicReaderScreen> {
                     ],
                   ),
                 )
-              : Stack(
-                  children: [
-                    PageFlipWidget(
-                      key: _controller,
-                      backgroundColor: Colors.black,
-                      initialIndex: _savedPage < _pages.length ? _savedPage : 0,
-                      lastPage: GestureDetector(
-                        onTap: () => setState(() => _uiVisible = !_uiVisible),
-                        child: Container(color: Colors.black),
-                      ),
-                      isRightSwipe: false,
-                      children: _pages.asMap().entries.map((entry) {
-                        return RepaintBoundary(
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onTap: () => setState(() => _uiVisible = !_uiVisible),
-                            child: Container(
-                              key: ValueKey('page_container_${entry.key}'),
-                              color: Colors.black,
-                              child: InteractiveViewer(
-                                minScale: 1.0,
-                                maxScale: 4.0,
-                                panEnabled: true,
-                                scaleEnabled: true,
-                                child: Center(
-                                  child: Image.memory(
-                                    entry.value,
-                                    key: ValueKey('page_image_${entry.key}'),
-                                    fit: BoxFit.contain,
-                                    gaplessPlayback: true,
-                                    filterQuality: FilterQuality.medium,
-                                    isAntiAlias: true,
-                                  ),
+              else
+                PageFlipWidget(
+                  key: _controller,
+                  backgroundColor: Colors.black,
+                  initialIndex: _savedPage < _pages.length ? _savedPage : 0,
+                  lastPage: RepaintBoundary(
+                    child: GestureDetector(
+                      onTap: () => setState(() => _uiVisible = !_uiVisible),
+                      child: Container(color: Colors.black),
+                    ),
+                  ),
+                  isRightSwipe: false,
+                  children: <Widget>[
+                    ..._pages.asMap().entries.map((entry) {
+                      return RepaintBoundary(
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => setState(() => _uiVisible = !_uiVisible),
+                          child: Container(
+                            key: ValueKey('page_container_${entry.key}'),
+                            color: Colors.black,
+                            child: InteractiveViewer(
+                              minScale: 1.0,
+                              maxScale: 4.0,
+                              panEnabled: true,
+                              scaleEnabled: true,
+                              child: Center(
+                                child: Image.memory(
+                                  entry.value,
+                                  key: ValueKey('page_image_${entry.key}'),
+                                  fit: BoxFit.contain,
+                                  gaplessPlayback: true,
+                                  filterQuality: FilterQuality.medium,
+                                  isAntiAlias: true,
                                 ),
                               ),
                             ),
                           ),
-                        );
-                      }).toList(),
-                    ),
-                    AnimatedPositioned(
-                      duration: const Duration(milliseconds: 250),
-                      curve: Curves.easeInOut,
-                      top: (_uiVisible || isDownloading) ? 0 : -(kToolbarHeight + MediaQuery.of(context).padding.top + 20),
-                      left: 0,
-                      right: 0,
-                      child: Container(
-                        height: kToolbarHeight + MediaQuery.of(context).padding.top,
-                        padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
-                        decoration: const BoxDecoration(
-                          color: Color(0xFFFFEB3B),
-                          border: Border(bottom: BorderSide(color: Colors.black, width: 3)),
                         ),
-                        child: Row(
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.close, color: Colors.black),
-                              onPressed: () => Navigator.pop(context),
-                            ),
-                            Expanded(
-                              child: Text(
-                                widget.comic.title.toUpperCase(),
-                                style: const TextStyle(fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, fontSize: 14),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.only(right: 8.0),
-                              child: _buildHeaderDownloadAction(provider, currentComic, isDownloading, progress),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    if (_uiVisible && _showContinuePrompt)
-                      Positioned(
-                        top: kToolbarHeight + MediaQuery.of(context).padding.top + 20,
-                        left: 20,
-                        right: 20,
-                        child: Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            border: Border.all(color: Colors.black, width: 3),
-                            boxShadow: const [BoxShadow(color: Colors.black, offset: Offset(4, 4))],
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  "CONTINUE FROM PAGE ${_savedPage + 1}?",
-                                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
-                                ),
-                              ),
-                              TextButton(
-                                onPressed: () => _jumpToPage(_savedPage),
-                                child: const Text(
-                                "CONTINUE",
-                                  style: TextStyle(
-                                    color: Color(0xFFFF5252),
-                                    fontWeight: FontWeight.w900,
-                                  ),
-                                ),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.close, size: 20),
-                                onPressed: () => setState(() => _showContinuePrompt = false),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    AnimatedPositioned(
-                      duration: const Duration(milliseconds: 250),
-                      curve: Curves.easeInOut,
-                      bottom: _uiVisible ? 20 : -100,
-                      right: 20,
-                      child: GestureDetector(
-                        onTap: _showJumpDialog,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFFEB3B),
-                            border: Border.all(color: Colors.black, width: 3),
-                            boxShadow: const [BoxShadow(color: Colors.black, offset: Offset(3, 3))],
-                          ),
-                          child: Text(
-                            "PAGE ${_currentPage + 1} OF ${_pages.length}",
-                            style: const TextStyle(fontWeight: FontWeight.w900),
-                          ),
-                        ),
-                      ),
-                    ),
+                      );
+                    }),
                   ],
                 ),
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeInOut,
+                top: (_uiVisible || isDownloading || _loading) ? 0 : -(kToolbarHeight + MediaQuery.of(context).padding.top + 20),
+                left: 0,
+                right: 0,
+                child: Container(
+                  height: kToolbarHeight + MediaQuery.of(context).padding.top,
+                  padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFFFEB3B),
+                    border: Border(bottom: BorderSide(color: Colors.black, width: 3)),
+                  ),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.black),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                      Expanded(
+                        child: Text(
+                          widget.comic.title.toUpperCase(),
+                          style: const TextStyle(fontWeight: FontWeight.w900, fontStyle: FontStyle.italic, fontSize: 14),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8.0),
+                        child: _buildHeaderDownloadAction(provider, currentComic, isDownloading, progress),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              if (!_loading && _uiVisible && _showContinuePrompt)
+                Positioned(
+                  top: kToolbarHeight + MediaQuery.of(context).padding.top + 20,
+                  left: 20,
+                  right: 20,
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      border: Border.all(color: Colors.black, width: 3),
+                      boxShadow: const [BoxShadow(color: Colors.black, offset: Offset(4, 4))],
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            "CONTINUE FROM PAGE ${_savedPage + 1}?",
+                            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 12),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () => _jumpToPage(_savedPage),
+                          child: const Text(
+                          "CONTINUE",
+                            style: TextStyle(
+                              color: Color(0xFFFF5252),
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 20),
+                          onPressed: () => setState(() => _showContinuePrompt = false),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              if (!_loading)
+                AnimatedPositioned(
+                  duration: const Duration(milliseconds: 250),
+                  curve: Curves.easeInOut,
+                  bottom: _uiVisible ? 20 : -100,
+                  right: 20,
+                  child: GestureDetector(
+                    onTap: _showJumpDialog,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFEB3B),
+                        border: Border.all(color: Colors.black, width: 3),
+                        boxShadow: const [BoxShadow(color: Colors.black, offset: Offset(3, 3))],
+                      ),
+                      child: Text(
+                        "PAGE ${_currentPage + 1} OF ${_pages.length}",
+                        style: const TextStyle(fontWeight: FontWeight.w900),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
         );
       },
     );

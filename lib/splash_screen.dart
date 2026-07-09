@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -10,29 +11,18 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMixin {
-  late AnimationController _mainController;
   late AnimationController _bgController;
-  late Animation<double> _scaleAnimation;
+  String _version = "";
 
   @override
   void initState() {
     super.initState();
-    _mainController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1200),
-    );
+    _initApp();
 
     _bgController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 10),
+      duration: const Duration(milliseconds: 1666),
     )..repeat();
-
-    _scaleAnimation = CurvedAnimation(
-      parent: _mainController,
-      curve: Curves.elasticOut,
-    );
-
-    _mainController.forward();
 
     Timer(const Duration(seconds: 4), () {
       if (mounted) {
@@ -41,9 +31,17 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
     });
   }
 
+  Future<void> _initApp() async {
+    final packageInfo = await PackageInfo.fromPlatform();
+    if (mounted) {
+      setState(() {
+        _version = "V${packageInfo.version}";
+      });
+    }
+  }
+
   @override
   void dispose() {
-    _mainController.dispose();
     _bgController.dispose();
     super.dispose();
   }
@@ -65,18 +63,18 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
             },
           ),
           Center(
-            child: ScaleTransition(
-              scale: _scaleAnimation,
-              child: Stack(
-                alignment: Alignment.center,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  CustomPaint(
-                    size: const Size(320, 320),
-                    painter: ComicBurstPainter(),
-                  ),
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
+                  Stack(
+                    alignment: Alignment.center,
                     children: [
+                      CustomPaint(
+                        size: const Size(320, 320),
+                        painter: ComicBurstPainter(),
+                      ),
                       Container(
                         width: 160,
                         height: 160,
@@ -97,62 +95,74 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                           ),
                         ),
                       ),
-                      const SizedBox(height: 25),
-                      Transform.rotate(
-                        angle: -0.08,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            border: Border.all(color: Colors.black, width: 4),
-                            boxShadow: const [
-                              BoxShadow(
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Transform.translate(
+                        offset: const Offset(10, -20),
+                        child: Transform.rotate(
+                          angle: -0.12,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              border: Border.all(color: Colors.black, width: 4),
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Colors.black,
+                                  offset: Offset(6, 6),
+                                ),
+                              ],
+                            ),
+                            child: const Text(
+                              "PALM",
+                              style: TextStyle(
+                                fontSize: 38,
+                                fontWeight: FontWeight.w900,
+                                fontStyle: FontStyle.italic,
                                 color: Colors.black,
-                                offset: Offset(6, 6),
+                                letterSpacing: 2,
                               ),
-                            ],
-                          ),
-                          child: const Text(
-                            "PALM",
-                            style: TextStyle(
-                              fontSize: 46,
-                              fontWeight: FontWeight.w900,
-                              fontStyle: FontStyle.italic,
-                              color: Colors.black,
-                              letterSpacing: 2,
                             ),
                           ),
                         ),
                       ),
-                      const SizedBox(height: 12),
-                      Transform.rotate(
-                        angle: 0.08,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFF5252),
-                            border: Border.all(color: Colors.black, width: 4),
-                            boxShadow: const [
-                              BoxShadow(
-                                color: Colors.black,
-                                offset: Offset(6, 6),
+                      Transform.translate(
+                        offset: const Offset(-10, 30),
+                        child: Transform.rotate(
+                          angle: 0.08,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFF5252),
+                              border: Border.all(color: Colors.black, width: 4),
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Colors.black,
+                                  offset: Offset(6, 6),
+                                ),
+                              ],
+                            ),
+                            child: const Text(
+                              "COMICS",
+                              style: TextStyle(
+                                fontSize: 38,
+                                fontWeight: FontWeight.w900,
+                                fontStyle: FontStyle.italic,
+                                color: Colors.white,
+                                letterSpacing: 2,
                               ),
-                            ],
-                          ),
-                          child: const Text(
-                            "COMICS",
-                            style: TextStyle(
-                              fontSize: 46,
-                              fontWeight: FontWeight.w900,
-                              fontStyle: FontStyle.italic,
-                              color: Colors.white,
-                              letterSpacing: 2,
                             ),
                           ),
                         ),
                       ),
                     ],
                   ),
+                  const SizedBox(height: 40),
                 ],
               ),
             ),
@@ -161,23 +171,37 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
             bottom: 60,
             left: 0,
             right: 0,
-            child: Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                decoration: BoxDecoration(
-                  color: Colors.black,
-                  border: Border.all(color: Colors.white, width: 2),
-                ),
-                child: const Text(
-                  "LOADING...",
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                    fontStyle: FontStyle.italic,
-                    letterSpacing: 4,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.black,
+                    border: Border.all(color: Colors.white, width: 2),
+                  ),
+                  child: const Text(
+                    "LOADING...",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                      fontStyle: FontStyle.italic,
+                      letterSpacing: 4,
+                    ),
                   ),
                 ),
-              ),
+                if (_version.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    _version,
+                    style: const TextStyle(
+                      color: Colors.black,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 10,
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
         ],

@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -15,13 +17,17 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   final LocalAuthentication _localAuth = LocalAuthentication();
+  
+  late AnimationController _bgController;
+  
   bool _canCheckBiometrics = false;
+  List<BiometricType> _availableBiometrics = [];
   bool _hasPreviousLogin = false;
   bool _isSignUp = true;
   bool _isAuthenticating = false;
@@ -30,7 +36,22 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
+    
+    _bgController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1666),
+    )..repeat();
+
     _checkStatus();
+  }
+
+  @override
+  void dispose() {
+    _bgController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
   }
 
   Future<void> _checkStatus() async {
@@ -38,14 +59,36 @@ class _LoginScreenState extends State<LoginScreen> {
     final bool canAuthenticateWithBiometrics = await _localAuth.canCheckBiometrics;
     final bool canAuthenticate = canAuthenticateWithBiometrics || await _localAuth.isDeviceSupported();
     
+    List<BiometricType> availableBiometrics = [];
+    try {
+      availableBiometrics = await _localAuth.getAvailableBiometrics();
+    } catch (e) {
+      debugPrint(e.toString());
+    }
+    
     setState(() {
       _hasPreviousLogin = prefs.getBool('has_logged_in') ?? false;
       _isSignUp = !_hasPreviousLogin;
       _canCheckBiometrics = canAuthenticate;
+      _availableBiometrics = availableBiometrics;
     });
 
     if (_hasPreviousLogin && _canCheckBiometrics) {
       _authenticateWithBiometrics();
+    }
+  }
+
+  IconData _getBiometricIcon() {
+    if (Platform.isIOS) {
+      if (_availableBiometrics.contains(BiometricType.face)) {
+        return Icons.face_unlock_outlined;
+      }
+      return Icons.fingerprint;
+    } else {
+      if (_availableBiometrics.contains(BiometricType.face)) {
+        return Icons.face_unlock_outlined;
+      }
+      return Icons.fingerprint;
     }
   }
 
@@ -184,237 +227,294 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFFFEB3B),
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24.0),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      border: Border.all(color: Colors.black, width: 4),
-                      boxShadow: const [BoxShadow(color: Colors.black, offset: Offset(8, 8))],
-                    ),
-                    child: Text(
-                      _isSignUp ? "SIGN UP" : "LOGIN",
-                      style: const TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.w900,
-                        fontStyle: FontStyle.italic,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 40),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      border: Border.all(color: Colors.black, width: 3),
-                    ),
-                    child: TextFormField(
-                      controller: _emailController,
-                      enabled: !_isAuthenticating,
-                      keyboardType: TextInputType.emailAddress,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                      decoration: const InputDecoration(
-                        hintText: "EMAIL",
-                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        border: InputBorder.none,
-                      ),
-                      validator: (value) => value!.isEmpty ? 'Enter email' : null,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      border: Border.all(color: Colors.black, width: 3),
-                    ),
-                    child: TextFormField(
-                      controller: _passwordController,
-                      enabled: !_isAuthenticating,
-                      obscureText: true,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                      decoration: const InputDecoration(
-                        hintText: "PASSWORD",
-                        contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        border: InputBorder.none,
-                      ),
-                      validator: (value) => value!.isEmpty ? 'Enter password' : null,
-                    ),
-                  ),
-                  if (_isSignUp) ...[
-                    const SizedBox(height: 16),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        border: Border.all(color: Colors.black, width: 3),
-                      ),
-                      child: TextFormField(
-                        controller: _confirmPasswordController,
-                        enabled: !_isAuthenticating,
-                        obscureText: true,
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                        decoration: const InputDecoration(
-                          hintText: "CONFIRM PASSWORD",
-                          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          border: InputBorder.none,
-                        ),
-                        validator: (value) => value!.isEmpty ? 'Confirm password' : null,
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 24),
-                  Opacity(
-                    opacity: _isAuthenticating ? 0.6 : 1.0,
-                    child: GestureDetector(
-                      onTap: _isAuthenticating ? null : _handleAuth,
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
+      body: Stack(
+        children: [
+          AnimatedBuilder(
+            animation: _bgController,
+            builder: (context, child) {
+              return Positioned.fill(
+                child: CustomPaint(
+                  painter: ComicBackgroundPainter(_bgController.value),
+                ),
+              );
+            },
+          ),
+          SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24.0),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFFF5252),
-                          border: Border.all(color: Colors.black, width: 3),
-                          boxShadow: const [BoxShadow(color: Colors.black, offset: Offset(4, 4))],
+                          color: Colors.white,
+                          border: Border.all(color: Colors.black, width: 4),
+                          boxShadow: const [BoxShadow(color: Colors.black, offset: Offset(8, 8))],
                         ),
-                        child: Center(
-                          child: _isAuthenticating && _loadingType == "email"
-                              ? const SizedBox(
-                                  height: 24,
-                                  width: 24,
-                                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3),
-                                )
-                              : Text(
-                                  _isSignUp ? "SIGN UP" : "LOGIN",
-                                  style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900),
-                                ),
+                        child: Text(
+                          _isSignUp ? "SIGN UP" : "LOGIN",
+                          style: const TextStyle(
+                            fontSize: 32,
+                            fontWeight: FontWeight.w900,
+                            fontStyle: FontStyle.italic,
+                          ),
                         ),
                       ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Opacity(
-                    opacity: _isAuthenticating ? 0.6 : 1.0,
-                    child: GestureDetector(
-                      onTap: _isAuthenticating ? null : _signInWithGoogle,
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                      const SizedBox(height: 40),
+                      Container(
                         decoration: BoxDecoration(
                           color: Colors.white,
                           border: Border.all(color: Colors.black, width: 3),
-                          boxShadow: const [BoxShadow(color: Colors.black, offset: Offset(4, 4))],
                         ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            _isAuthenticating && _loadingType == "google"
-                                ? const SizedBox(
-                                    height: 24,
-                                    width: 24,
-                                    child: CircularProgressIndicator(color: Colors.black, strokeWidth: 3),
-                                  )
-                                : Image.network(
-                                    'https://www.gstatic.com/images/branding/product/2x/googleg_48dp.png',
-                                    height: 24,
-                                    errorBuilder: (context, error, stackTrace) => const Icon(Icons.g_mobiledata, color: Colors.black),
-                                  ),
-                            if (!(_isAuthenticating && _loadingType == "google")) ...[
-                              const SizedBox(width: 12),
-                              Flexible(
-                                child: Text(
-                                  _isSignUp ? "SIGN UP WITH GOOGLE" : "LOGIN WITH GOOGLE",
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(color: Colors.black, fontSize: 14, fontWeight: FontWeight.w900),
-                                ),
-                              ),
-                            ],
-                          ],
+                        child: TextFormField(
+                          controller: _emailController,
+                          enabled: !_isAuthenticating,
+                          keyboardType: TextInputType.emailAddress,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                          decoration: const InputDecoration(
+                            hintText: "EMAIL",
+                            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            border: InputBorder.none,
+                          ),
+                          validator: (value) => value!.isEmpty ? 'Enter email' : null,
                         ),
                       ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextButton(
-                    onPressed: _isAuthenticating ? null : () {
-                      HapticFeedback.lightImpact();
-                      setState(() => _isSignUp = !_isSignUp);
-                    },
-                    child: Text(
-                      _isSignUp ? "ALREADY HAVE AN ACCOUNT? LOGIN" : "NEED AN ACCOUNT? SIGN UP",
-                      style: TextStyle(
-                        color: _isAuthenticating ? Colors.black38 : Colors.black,
-                        fontWeight: FontWeight.bold,
+                      const SizedBox(height: 16),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          border: Border.all(color: Colors.black, width: 3),
+                        ),
+                        child: TextFormField(
+                          controller: _passwordController,
+                          enabled: !_isAuthenticating,
+                          obscureText: true,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                          decoration: const InputDecoration(
+                            hintText: "PASSWORD",
+                            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            border: InputBorder.none,
+                          ),
+                          validator: (value) => value!.isEmpty ? 'Enter password' : null,
+                        ),
                       ),
-                    ),
-                  ),
-                  if (!_isSignUp && _hasPreviousLogin && _canCheckBiometrics) ...[
-                    const SizedBox(height: 24),
-                    Opacity(
-                      opacity: _isAuthenticating ? 0.6 : 1.0,
-                      child: Column(
-                        children: [
-                          _isAuthenticating && _loadingType == "biometric"
-                              ? const CircularProgressIndicator(color: Colors.black)
-                              : IconButton(
-                                  icon: const Icon(Icons.fingerprint, size: 60, color: Colors.black),
-                                  onPressed: _isAuthenticating ? null : _authenticateWithBiometrics,
-                                ),
-                          const Text("Biometric Login", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12)),
-                        ],
-                      ),
-                    ),
-                  ],
-                  if (_hasPreviousLogin) ...[
-                    const SizedBox(height: 40),
-                    Opacity(
-                      opacity: _isAuthenticating ? 0.4 : 1.0,
-                      child: GestureDetector(
-                        onTap: _isAuthenticating ? null : () {
-                          HapticFeedback.mediumImpact();
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (context) => const DownloadsScreen()),
-                          );
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                      if (_isSignUp) ...[
+                        const SizedBox(height: 16),
+                        Container(
                           decoration: BoxDecoration(
-                            color: Colors.black,
-                            border: Border.all(color: Colors.white, width: 2),
-                            boxShadow: const [BoxShadow(color: Colors.black45, offset: Offset(4, 4))],
+                            color: Colors.white,
+                            border: Border.all(color: Colors.black, width: 3),
                           ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.download_done_rounded, color: Colors.white, size: 20),
-                              SizedBox(width: 10),
-                              Text(
-                                "VIEW OFFLINE COMICS",
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: 12,
-                                  letterSpacing: 1,
-                                ),
-                              ),
-                            ],
+                          child: TextFormField(
+                            controller: _confirmPasswordController,
+                            enabled: !_isAuthenticating,
+                            obscureText: true,
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                            decoration: const InputDecoration(
+                              hintText: "CONFIRM PASSWORD",
+                              contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              border: InputBorder.none,
+                            ),
+                            validator: (value) => value!.isEmpty ? 'Confirm password' : null,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 24),
+                      Opacity(
+                        opacity: _isAuthenticating ? 0.6 : 1.0,
+                        child: GestureDetector(
+                          onTap: _isAuthenticating ? null : _handleAuth,
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFF5252),
+                              border: Border.all(color: Colors.black, width: 3),
+                              boxShadow: const [BoxShadow(color: Colors.black, offset: Offset(4, 4))],
+                            ),
+                            child: Center(
+                              child: _isAuthenticating && _loadingType == "email"
+                                  ? const SizedBox(
+                                      height: 24,
+                                      width: 24,
+                                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3),
+                                    )
+                                  : Text(
+                                      _isSignUp ? "SIGN UP" : "LOGIN",
+                                      style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900),
+                                    ),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
-                ],
+                      const SizedBox(height: 16),
+                      Opacity(
+                        opacity: _isAuthenticating ? 0.6 : 1.0,
+                        child: GestureDetector(
+                          onTap: _isAuthenticating ? null : _signInWithGoogle,
+                          child: Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              border: Border.all(color: Colors.black, width: 3),
+                              boxShadow: const [BoxShadow(color: Colors.black, offset: Offset(4, 4))],
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _isAuthenticating && _loadingType == "google"
+                                    ? const SizedBox(
+                                        height: 24,
+                                        width: 24,
+                                        child: CircularProgressIndicator(color: Colors.black, strokeWidth: 3),
+                                      )
+                                    : Image.network(
+                                        'https://www.gstatic.com/images/branding/product/2x/googleg_48dp.png',
+                                        height: 24,
+                                        errorBuilder: (context, error, stackTrace) => const Icon(Icons.g_mobiledata, color: Colors.black),
+                                      ),
+                                if (!(_isAuthenticating && _loadingType == "google")) ...[
+                                  const SizedBox(width: 12),
+                                  Flexible(
+                                    child: Text(
+                                      _isSignUp ? "SIGN UP WITH GOOGLE" : "LOGIN WITH GOOGLE",
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(color: Colors.black, fontSize: 14, fontWeight: FontWeight.w900),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextButton(
+                        onPressed: _isAuthenticating ? null : () {
+                          HapticFeedback.lightImpact();
+                          setState(() => _isSignUp = !_isSignUp);
+                        },
+                        child: Text(
+                          _isSignUp ? "ALREADY HAVE AN ACCOUNT? LOGIN" : "NEED AN ACCOUNT? SIGN UP",
+                          style: TextStyle(
+                            color: _isAuthenticating ? Colors.black38 : Colors.black,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      if (!_isSignUp && _hasPreviousLogin && _canCheckBiometrics) ...[
+                        const SizedBox(height: 24),
+                        Opacity(
+                          opacity: _isAuthenticating ? 0.6 : 1.0,
+                          child: Column(
+                            children: [
+                              _isAuthenticating && _loadingType == "biometric"
+                                  ? const CircularProgressIndicator(color: Colors.black)
+                                  : IconButton(
+                                      icon: Icon(_getBiometricIcon(), size: 60, color: Colors.black),
+                                      onPressed: _isAuthenticating ? null : _authenticateWithBiometrics,
+                                    ),
+                              const Text("Biometric Login", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12)),
+                            ],
+                          ),
+                        ),
+                      ],
+                      if (_hasPreviousLogin) ...[
+                        const SizedBox(height: 40),
+                        Opacity(
+                          opacity: _isAuthenticating ? 0.4 : 1.0,
+                          child: GestureDetector(
+                            onTap: _isAuthenticating ? null : () {
+                              HapticFeedback.mediumImpact();
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (context) => const DownloadsScreen()),
+                              );
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: Colors.black,
+                                border: Border.all(color: Colors.white, width: 2),
+                                boxShadow: const [BoxShadow(color: Colors.black45, offset: Offset(4, 4))],
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.download_done_rounded, color: Colors.white, size: 20),
+                                  SizedBox(width: 10),
+                                  Text(
+                                    "VIEW OFFLINE COMICS",
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 12,
+                                      letterSpacing: 1,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }
+}
+
+class ComicBackgroundPainter extends CustomPainter {
+  final double animationValue;
+  ComicBackgroundPainter(this.animationValue);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.black.withOpacity(0.05)
+      ..style = PaintingStyle.fill;
+
+    const double spacing = 30.0;
+    final double offset = animationValue * spacing;
+
+    for (double x = -spacing; x < size.width + spacing; x += spacing) {
+      for (double y = -spacing; y < size.height + spacing; y += spacing) {
+        canvas.drawCircle(
+          Offset(x + offset, y + offset),
+          2.5,
+          paint,
+        );
+      }
+    }
+
+    final linePaint = Paint()
+      ..color = Colors.black.withOpacity(0.03)
+      ..strokeWidth = 2;
+
+    final center = Offset(size.width / 2, size.height / 2);
+    const int lineCount = 24;
+    for (int i = 0; i < lineCount; i++) {
+      double angle = (i * 2 * math.pi / lineCount) + (animationValue * 0.2);
+      canvas.drawLine(
+        center,
+        center + Offset(math.cos(angle) * size.width, math.sin(angle) * size.height),
+        linePaint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(ComicBackgroundPainter oldDelegate) => true;
 }
