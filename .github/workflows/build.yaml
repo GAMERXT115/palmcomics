@@ -18,24 +18,28 @@ jobs:
         with:
           channel: 'stable'
 
+      # Generate Flutter iOS helper files
       - run: flutter pub get
-      - run: flutter precache --ios   # ✅ generates podhelper.rb
+      - run: flutter precache --ios
+      - run: flutter build ios --no-codesign
 
-      - run: flutter build ios --no-codesign   # ✅ also generates helper files
-
+      # Install CocoaPods
       - run: |
           cd ios
           pod repo update
           pod install --repo-update
           cd ..
 
+      # Build release IPA
       - run: flutter build ios --release --no-codesign
 
+      # Package IPA
       - run: |
           mkdir -p Payload
           mv build/ios/iphoneos/Runner.app Payload/
           zip -r app.ipa Payload
 
+      # Upload artifact
       - uses: actions/upload-artifact@v4
         with:
           name: sideload-ipa
