@@ -12,8 +12,10 @@ jobs:
     runs-on: macos-latest
 
     steps:
+      # Checkout source
       - uses: actions/checkout@v4
 
+      # Setup Flutter
       - uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
@@ -21,6 +23,7 @@ jobs:
       # Generate Flutter iOS helper files
       - run: flutter pub get
       - run: flutter precache --ios
+      # This build step ensures ios/Flutter/podhelper.rb exists
       - run: flutter build ios --no-codesign
 
       # Install CocoaPods
