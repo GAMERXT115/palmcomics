@@ -13,7 +13,22 @@ import 'home.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
+  
+  if (Platform.isIOS) {
+    await Firebase.initializeApp(
+      options: const FirebaseOptions(
+        apiKey: 'AIzaSyC8WrbLRWrggHUapK3Rt8unvM3BHY6xP6s',
+        appId: '1:73084774791:ios:b73a5e725360c06d6dcb22',
+        messagingSenderId: '73084774791',
+        projectId: 'palmcomics-50edb',
+        databaseURL: 'https://palmcomics-50edb-default-rtdb.europe-west1.firebasedatabase.app',
+        storageBucket: 'palmcomics-50edb.firebasestorage.app',
+      ),
+    );
+  } else {
+    await Firebase.initializeApp();
+  }
+
   runApp(
     MultiProvider(
       providers: [
