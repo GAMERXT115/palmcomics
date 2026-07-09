@@ -1,5 +1,7 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:path_provider/path_provider.dart';
 import 'main.dart';
 import 'downloads.dart';
 import 'comic_reader.dart';
@@ -18,9 +20,27 @@ class _ComicListScreenState extends State<ComicListScreen> {
   @override
   void initState() {
     super.initState();
+    _clearCache();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Provider.of<ComicProvider>(context, listen: false).fetchComics();
     });
+  }
+
+  Future<void> _clearCache() async {
+    try {
+      final tempDir = await getTemporaryDirectory();
+      if (tempDir.existsSync()) {
+        tempDir.listSync().forEach((entity) {
+          if (entity is File) {
+            entity.deleteSync();
+          } else if (entity is Directory) {
+            entity.deleteSync(recursive: true);
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint(e.toString());
+    }
   }
 
   @override
@@ -30,6 +50,7 @@ class _ComicListScreenState extends State<ComicListScreen> {
   }
 
   void _openComic(Comic comic) {
+    FocusScope.of(context).unfocus();
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -227,80 +248,153 @@ class ComicPosterCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final provider = Provider.of<ComicProvider>(context, listen: false);
+    return Consumer<ComicProvider>(
+      builder: (context, provider, child) {
+        final currentComic = provider.comics.firstWhere(
+          (c) => c.id == comic.id,
+          orElse: () => comic,
+        );
+        
+        final isDownloading = provider.downloadingIds.containsKey(currentComic.id);
+        final progress = provider.downloadingIds[currentComic.id] ?? 0.0;
 
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 150,
-        margin: const EdgeInsets.symmetric(horizontal: 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  border: Border.all(color: Colors.black, width: 3),
-                  boxShadow: const [
-                    BoxShadow(color: Colors.black, offset: Offset(4, 4)),
-                  ],
-                ),
-                child: comic.coverUrl.isNotEmpty
-                    ? Image.network(
-                        comic.coverUrl,
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                        errorBuilder: (context, error, stackTrace) =>
-                            const Center(child: Icon(Icons.book, size: 40)),
-                      )
-                    : const Center(child: Icon(Icons.book, size: 40)),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                border: Border.all(color: Colors.black, width: 2),
-                boxShadow: const [
-                  BoxShadow(color: Colors.black, offset: Offset(2, 2)),
-                ],
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      comic.title.toUpperCase(),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w900,
-                        fontSize: 13,
-                        height: 1.1,
-                      ),
+        return Container(
+          width: 150,
+          margin: const EdgeInsets.symmetric(horizontal: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: GestureDetector(
+                  onTap: onTap,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      border: Border.all(color: Colors.black, width: 3),
+                      boxShadow: const [
+                        BoxShadow(color: Colors.black, offset: Offset(4, 4)),
+                      ],
+                    ),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        currentComic.coverUrl.isNotEmpty
+                            ? Image.network(
+                                currentComic.coverUrl,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) =>
+                                    const Center(child: Icon(Icons.book, size: 40)),
+                              )
+                            : const Center(child: Icon(Icons.book, size: 40)),
+                        if (isDownloading)
+                          Container(
+                            color: Colors.black.withOpacity(0.7),
+                            child: Center(
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  SizedBox(
+                                    width: 48,
+                                    height: 48,
+                                    child: CircularProgressIndicator(
+                                      value: progress > 0 ? progress : null,
+                                      strokeWidth: 6,
+                                      color: const Color(0xFFFFEB3B),
+                                      backgroundColor: Colors.white24,
+                                    ),
+                                  ),
+                                  const Icon(
+                                    Icons.stop,
+                                    size: 24,
+                                    color: Colors.white,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
-                  const SizedBox(width: 4),
-                  if (!comic.isDownloaded)
-                    GestureDetector(
-                      onTap: () => provider.downloadComic(comic),
-                      child: const Icon(
-                        Icons.download_for_offline,
-                        color: Colors.black,
-                        size: 24,
-                      ),
-                    )
-                  else
-                    const Icon(
-                      Icons.check_circle,
-                      color: Colors.green,
-                      size: 24,
-                    ),
-                ],
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border.all(color: Colors.black, width: 2),
+                  boxShadow: const [
+                    BoxShadow(color: Colors.black, offset: Offset(2, 2)),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: onTap,
+                        child: Text(
+                          currentComic.title.toUpperCase(),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 13,
+                            height: 1.1,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    SizedBox(
+                      width: 36,
+                      height: 36,
+                      child: _buildDownloadAction(provider, currentComic, isDownloading, progress),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDownloadAction(ComicProvider provider, Comic currentComic, bool isDownloading, double progress) {
+    if (currentComic.isDownloaded) {
+      return const Center(
+        child: Icon(
+          Icons.check_circle,
+          color: Color(0xFFFFEB3B),
+          size: 28,
+        ),
+      );
+    }
+
+    if (isDownloading) {
+      return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => provider.cancelDownload(currentComic.id),
+        child: const Center(
+          child: Icon(
+            Icons.stop_circle_outlined,
+            size: 28,
+            color: Colors.black,
+          ),
+        ),
+      );
+    }
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        provider.downloadComic(currentComic);
+      },
+      child: const Center(
+        child: Icon(
+          Icons.download_for_offline,
+          color: Colors.black,
+          size: 28,
         ),
       ),
     );
@@ -399,4 +493,3 @@ class _CategoryGridViewState extends State<CategoryGridView> {
     );
   }
 }
- 

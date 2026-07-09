@@ -70,12 +70,16 @@ class Comic {
 class ComicProvider extends ChangeNotifier {
   List<Comic> _comics = [];
   bool _isLoading = false;
+  bool _isRequestingPermission = false;
   final Dio _dio = Dio();
   String _baseUrl = "";
+  final Map<String, double> _downloadingIds = {};
+  final Map<String, CancelToken> _cancelTokens = {};
 
   List<Comic> get comics => _comics;
   bool get isLoading => _isLoading;
   String get baseUrl => _baseUrl;
+  Map<String, double> get downloadingIds => _downloadingIds;
 
   void updateBaseUrl(String newUrl) {
     _baseUrl = newUrl;
@@ -144,13 +148,29 @@ class ComicProvider extends ChangeNotifier {
       final filePath = p.join(directory.path, fileName);
       comic.isDownloaded = await File(filePath).exists();
     }
+    notifyListeners();
   }
 
   Future<void> downloadComic(Comic comic) async {
+    if (_downloadingIds.containsKey(comic.id)) return;
+
     if (Platform.isAndroid) {
-      var status = await Permission.storage.request();
-      if (!status.isGranted) return;
+      if (_isRequestingPermission) return;
+      _isRequestingPermission = true;
+      try {
+        var status = await Permission.storage.request();
+        _isRequestingPermission = false;
+        if (!status.isGranted) return;
+      } catch (e) {
+        _isRequestingPermission = false;
+        return;
+      }
     }
+
+    final cancelToken = CancelToken();
+    _cancelTokens[comic.id] = cancelToken;
+    _downloadingIds[comic.id] = 0.0;
+    notifyListeners();
 
     try {
       final directory = await getApplicationDocumentsDirectory();
@@ -160,9 +180,46 @@ class ComicProvider extends ChangeNotifier {
       await _dio.download(
         comic.downloadUrl,
         filePath,
+        cancelToken: cancelToken,
+        onReceiveProgress: (received, total) {
+          if (total != -1) {
+            _downloadingIds[comic.id] = received / total;
+            notifyListeners();
+          }
+        },
       );
 
       comic.isDownloaded = true;
+    } catch (e) {
+      debugPrint(e.toString());
+    } finally {
+      _downloadingIds.remove(comic.id);
+      _cancelTokens.remove(comic.id);
+      notifyListeners();
+    }
+  }
+
+  void cancelDownload(String id) {
+    if (_cancelTokens.containsKey(id)) {
+      _cancelTokens[id]!.cancel();
+      _cancelTokens.remove(id);
+      _downloadingIds.remove(id);
+      notifyListeners();
+    }
+  }
+
+  Future<void> deleteDownloadedComic(Comic comic) async {
+    try {
+      final directory = await getApplicationDocumentsDirectory();
+      final fileName = p.basename(Uri.parse(comic.downloadUrl).path);
+      final filePath = p.join(directory.path, fileName);
+      final file = File(filePath);
+
+      if (await file.exists()) {
+        await file.delete();
+      }
+
+      comic.isDownloaded = false;
       notifyListeners();
     } catch (e) {
       debugPrint(e.toString());
