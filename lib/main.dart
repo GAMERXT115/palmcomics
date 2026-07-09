@@ -13,11 +13,7 @@ import 'home.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  try {
-    await Firebase.initializeApp();
-  } catch (e) {
-    debugPrint(e.toString());
-  }
+  await Firebase.initializeApp();
   runApp(
     MultiProvider(
       providers: [
