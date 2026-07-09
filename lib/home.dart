@@ -275,45 +275,15 @@ class ComicPosterCard extends StatelessWidget {
                         BoxShadow(color: Colors.black, offset: Offset(4, 4)),
                       ],
                     ),
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        currentComic.coverUrl.isNotEmpty
-                            ? Image.network(
-                                currentComic.coverUrl,
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) =>
-                                    const Center(child: Icon(Icons.book, size: 40)),
-                              )
-                            : const Center(child: Icon(Icons.book, size: 40)),
-                        if (isDownloading)
-                          Container(
-                            color: Colors.black.withOpacity(0.7),
-                            child: Center(
-                              child: Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  SizedBox(
-                                    width: 48,
-                                    height: 48,
-                                    child: CircularProgressIndicator(
-                                      value: progress > 0 ? progress : null,
-                                      strokeWidth: 6,
-                                      color: const Color(0xFFFFEB3B),
-                                      backgroundColor: Colors.white24,
-                                    ),
-                                  ),
-                                  const Icon(
-                                    Icons.stop,
-                                    size: 24,
-                                    color: Colors.white,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
+                    child: currentComic.coverUrl.isNotEmpty
+                        ? Image.network(
+                            currentComic.coverUrl,
+                            fit: BoxFit.cover,
+                            width: double.infinity,
+                            errorBuilder: (context, error, stackTrace) =>
+                                const Center(child: Icon(Icons.book, size: 40)),
+                          )
+                        : const Center(child: Icon(Icons.book, size: 40)),
                   ),
                 ),
               ),
@@ -375,11 +345,26 @@ class ComicPosterCard extends StatelessWidget {
       return GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () => provider.cancelDownload(currentComic.id),
-        child: const Center(
-          child: Icon(
-            Icons.stop_circle_outlined,
-            size: 28,
-            color: Colors.black,
+        child: Center(
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              SizedBox(
+                width: 28,
+                height: 28,
+                child: CircularProgressIndicator(
+                  value: progress > 0 ? progress : null,
+                  strokeWidth: 4,
+                  color: Colors.black,
+                  backgroundColor: Colors.black12,
+                ),
+              ),
+              const Icon(
+                Icons.stop,
+                size: 16,
+                color: Colors.black,
+              ),
+            ],
           ),
         ),
       );

@@ -117,6 +117,10 @@ class _ComicReaderScreenState extends State<ComicReaderScreen> {
       if (images.isEmpty) throw Exception("No images found in comic file");
 
       if (mounted) {
+        for (var imageBytes in images) {
+          precacheImage(MemoryImage(imageBytes), context);
+        }
+
         setState(() {
           _pages = images;
           if (_savedPage >= _pages.length) {
@@ -289,24 +293,27 @@ class _ComicReaderScreenState extends State<ComicReaderScreen> {
                       ),
                       isRightSwipe: false,
                       children: _pages.asMap().entries.map((entry) {
-                        return GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: () => setState(() => _uiVisible = !_uiVisible),
-                          child: Container(
-                            key: ValueKey('page_${entry.key}'),
-                            color: Colors.black,
-                            child: InteractiveViewer(
-                              minScale: 1.0,
-                              maxScale: 4.0,
-                              panEnabled: true,
-                              scaleEnabled: true,
-                              child: Center(
-                                child: Image.memory(
-                                  entry.value,
-                                  fit: BoxFit.contain,
-                                  gaplessPlayback: true,
-                                  filterQuality: FilterQuality.low,
-                                  isAntiAlias: true,
+                        return RepaintBoundary(
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () => setState(() => _uiVisible = !_uiVisible),
+                            child: Container(
+                              key: ValueKey('page_container_${entry.key}'),
+                              color: Colors.black,
+                              child: InteractiveViewer(
+                                minScale: 1.0,
+                                maxScale: 4.0,
+                                panEnabled: true,
+                                scaleEnabled: true,
+                                child: Center(
+                                  child: Image.memory(
+                                    entry.value,
+                                    key: ValueKey('page_image_${entry.key}'),
+                                    fit: BoxFit.contain,
+                                    gaplessPlayback: true,
+                                    filterQuality: FilterQuality.medium,
+                                    isAntiAlias: true,
+                                  ),
                                 ),
                               ),
                             ),
@@ -317,7 +324,7 @@ class _ComicReaderScreenState extends State<ComicReaderScreen> {
                     AnimatedPositioned(
                       duration: const Duration(milliseconds: 250),
                       curve: Curves.easeInOut,
-                      top: _uiVisible ? 0 : -(kToolbarHeight + MediaQuery.of(context).padding.top + 20),
+                      top: (_uiVisible || isDownloading) ? 0 : -(kToolbarHeight + MediaQuery.of(context).padding.top + 20),
                       left: 0,
                       right: 0,
                       child: Container(

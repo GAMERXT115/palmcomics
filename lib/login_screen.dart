@@ -365,7 +365,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   icon: const Icon(Icons.fingerprint, size: 60, color: Colors.black),
                                   onPressed: _isAuthenticating ? null : _authenticateWithBiometrics,
                                 ),
-                          const Text("QUICK SIGN IN", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12)),
+                          const Text("Biometric Login", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 12)),
                         ],
                       ),
                     ),

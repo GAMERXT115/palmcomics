@@ -32,13 +32,15 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
   @override
   Widget build(BuildContext context) {
     final provider = Provider.of<ComicProvider>(context);
-    final downloadedComics = provider.comics.where((c) {
+    
+    final downloadingAndDownloaded = provider.comics.where((c) {
+      final isDownloading = provider.downloadingIds.containsKey(c.id);
       final matchesSearch = c.title.toLowerCase().contains(_searchQuery.toLowerCase());
-      return c.isDownloaded && matchesSearch;
+      return (c.isDownloaded || isDownloading) && matchesSearch;
     }).toList();
 
     Map<String, List<Comic>> groupedComics = {};
-    for (var comic in downloadedComics) {
+    for (var comic in downloadingAndDownloaded) {
       String category = comic.category.toUpperCase();
       if (!groupedComics.containsKey(category)) {
         groupedComics[category] = [];
@@ -93,7 +95,7 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
           ),
         ),
       ),
-      body: downloadedComics.isEmpty
+      body: downloadingAndDownloaded.isEmpty
           ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -145,89 +147,159 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                         ),
                       ),
                     ),
-                    ListView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      padding: const EdgeInsets.all(12),
-                      itemCount: comics.length,
-                      itemBuilder: (context, cIndex) {
-                        final comic = comics[cIndex];
-                        return Dismissible(
-                          key: Key('download_${comic.id}'),
-                          direction: DismissDirection.endToStart,
-                          onDismissed: (direction) {
-                            provider.deleteDownloadedComic(comic);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text("${comic.title} DELETED"),
-                                backgroundColor: Colors.black,
-                              ),
-                            );
-                          },
-                          background: Container(
-                            alignment: Alignment.centerRight,
-                            padding: const EdgeInsets.only(right: 20),
-                            margin: const EdgeInsets.only(bottom: 16),
-                            color: Colors.red,
-                            child: const Icon(Icons.delete, color: Colors.white, size: 32),
-                          ),
-                          child: Container(
-                            margin: const EdgeInsets.only(bottom: 16),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              border: Border.all(color: Colors.black, width: 3),
-                              boxShadow: const [
-                                BoxShadow(
-                                  color: Colors.black,
-                                  offset: Offset(4, 4),
-                                ),
-                              ],
-                            ),
-                            child: ListTile(
-                              contentPadding: const EdgeInsets.all(8),
-                              leading: Container(
-                                width: 50,
-                                height: 75,
-                                decoration: BoxDecoration(
-                                  border: Border.all(color: Colors.black, width: 2),
-                                ),
-                                child: comic.coverUrl.isNotEmpty
-                                    ? Image.network(
-                                        comic.coverUrl,
-                                        fit: BoxFit.cover,
-                                        errorBuilder: (context, error, stackTrace) =>
-                                            const Icon(Icons.book, size: 30),
-                                      )
-                                    : const Icon(Icons.book, size: 30),
-                              ),
-                              title: Text(
-                                comic.title.toUpperCase(),
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: 16,
-                                ),
-                              ),
-                              subtitle: const Text(
-                                "READY FOR OFFLINE",
-                                style: TextStyle(
-                                  color: Colors.green,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 10,
-                                ),
-                              ),
-                              trailing: const Icon(Icons.play_circle_fill,
-                                  color: Colors.black, size: 32),
-                              onTap: () => _openComic(comic),
-                            ),
-                          ),
-                        );
-                      },
+                    SizedBox(
+                      height: 280,
+                      child: ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        scrollDirection: Axis.horizontal,
+                        itemCount: comics.length,
+                        itemBuilder: (context, cIndex) {
+                          return DownloadComicCard(
+                            comic: comics[cIndex],
+                            onTap: () => _openComic(comics[cIndex]),
+                          );
+                        },
+                      ),
                     ),
                     const SizedBox(height: 16),
                   ],
                 );
               },
             ),
+    );
+  }
+}
+
+class DownloadComicCard extends StatelessWidget {
+  final Comic comic;
+  final VoidCallback onTap;
+
+  const DownloadComicCard({super.key, required this.comic, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<ComicProvider>(
+      builder: (context, provider, child) {
+        final currentComic = provider.comics.firstWhere(
+          (c) => c.id == comic.id,
+          orElse: () => comic,
+        );
+        final isDownloading = provider.downloadingIds.containsKey(currentComic.id);
+        final progress = provider.downloadingIds[currentComic.id] ?? 0.0;
+
+        return Container(
+          width: 150,
+          margin: const EdgeInsets.symmetric(horizontal: 8),
+          child: Dismissible(
+            key: Key('download_card_${currentComic.id}'),
+            direction: DismissDirection.up,
+            onDismissed: (direction) {
+              provider.deleteDownloadedComic(currentComic);
+            },
+            background: Container(
+              alignment: Alignment.bottomCenter,
+              padding: const EdgeInsets.only(bottom: 20),
+              decoration: BoxDecoration(
+                color: Colors.red,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.delete, color: Colors.white, size: 32),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: GestureDetector(
+                    onTap: currentComic.isDownloaded ? onTap : null,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        border: Border.all(color: Colors.black, width: 3),
+                        boxShadow: const [
+                          BoxShadow(color: Colors.black, offset: Offset(4, 4)),
+                        ],
+                      ),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          currentComic.coverUrl.isNotEmpty
+                              ? Image.network(
+                                  currentComic.coverUrl,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) =>
+                                      const Center(child: Icon(Icons.book, size: 40)),
+                                )
+                              : const Center(child: Icon(Icons.book, size: 40)),
+                          if (isDownloading)
+                            Container(
+                              color: Colors.black.withOpacity(0.7),
+                              child: Center(
+                                child: Stack(
+                                  alignment: Alignment.center,
+                                  children: [
+                                    SizedBox(
+                                      width: 48,
+                                      height: 48,
+                                      child: CircularProgressIndicator(
+                                        value: progress > 0 ? progress : null,
+                                        strokeWidth: 6,
+                                        color: const Color(0xFFFFEB3B),
+                                        backgroundColor: Colors.white24,
+                                      ),
+                                    ),
+                                    const Icon(
+                                      Icons.stop,
+                                      size: 24,
+                                      color: Colors.white,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    border: Border.all(color: Colors.black, width: 2),
+                    boxShadow: const [
+                      BoxShadow(color: Colors.black, offset: Offset(2, 2)),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          currentComic.title.toUpperCase(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(
+                        currentComic.isDownloaded
+                            ? Icons.play_circle_fill
+                            : Icons.downloading,
+                        size: 20,
+                        color: currentComic.isDownloaded ? Colors.black : Colors.grey,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
